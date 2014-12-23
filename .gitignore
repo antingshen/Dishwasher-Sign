@@ -1,3 +1,9 @@
+.*
+*/Debug/
+*/targetConfigs/
+*.cmd
+
+
 # Object files
 *.o
 *.ko
