@@ -1,6 +1,6 @@
 .*
-*/Debug/
-*/targetConfigs/
+Debug/
+targetConfigs/
 *.cmd
 
 
