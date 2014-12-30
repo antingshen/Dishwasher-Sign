@@ -1,6 +1,7 @@
 #include "lcd.h"
+#include "i2c.h"
 
-const unsigned char rgb_default_data[] = {0x80,
+static const unsigned char rgb_default_data[] = {0x80,
 		0x80, 0x0d, // 0, 1
 		0xff, 0xff, 0xff, 0x00, // B, G, R, NC
 		0xff, 0x00,  // 6, 7
@@ -23,8 +24,8 @@ void set_led_color(unsigned char red, unsigned char green, unsigned char blue) {
 }
 void cycle_colors_forever() {
 	unsigned char color[] = {0xff, 0x00, 0x00};
-	int prev = 0;
-	int next = 1;
+	unsigned int prev = 0;
+	unsigned int next = 1;
 	int ctr;
 	for (;;) {
 		for (ctr = 255; ctr > 0; ctr--) {
@@ -59,7 +60,7 @@ void lcd_write(unsigned char addr, char* string, int bytes) {
 	i2c_stop();
 }
 
-void lcd_init(char* lcd_message) {
+void lcd_init() {
 	i2c_start();
 	i2c_send_byte(LCD_ADDRESS);
 
@@ -85,13 +86,6 @@ void lcd_init(char* lcd_message) {
 
 	i2c_send_byte(0x80);
 	i2c_send_byte(LCD_TOP_LINE);
-	__delay_cycles(500);
-
-	i2c_send_byte(0x40);
-	i2c_send((unsigned char*)lcd_message, 16);
-	__delay_cycles(500);
 
 	i2c_stop(); // restart
-	__delay_cycles(500);
-	lcd_write(LCD_BOT_LINE, lcd_message+16, 16);
 }

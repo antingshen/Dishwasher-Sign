@@ -3,67 +3,35 @@
 #include "lcd.h"
 
 #define BUTTON BIT3
+#define TOUCH BIT1
+#define DIRTY_REG P2OUT	// store dirty state in unused register bit instead of RAM
+#define DIRTY_BIT BIT0
 
-char lcd_message[32] = "Clean - 01:00:00                ";
-void strncpy(char* dest, char* source, int bytes) {
-	for (;bytes > 0; bytes--) {
-		*dest = *source;
-		dest++;
-		source++;
-	}
-}
-
-void wait_for_button() {
-	__delay_cycles(200000);
-	while(P1IN & BIT3);
-}
+char lcd_message[16] = "01:00:00";
 
 unsigned char day_of_week;
 void init_clock() {
-	TACCTL0 = CCIE;
-	TACCR0 = 32767;
-	TACTL = TASSEL_2 | MC_2 | ID_3;
+	TACCTL0 = CCIE;		// Enable TimerA interrupt
+	TACCR0 = 32767; 	// Interrupt after this many ticks
+	TACTL = TASSEL_2	// Use SMCLK (system clock)
+			| MC_1		// Timer counts up to TACCR0
+			| ID_3;		// Divide clock input by 8
 }
 
-unsigned char dirty = 0;
 void set_dirty() {
-	strncpy(lcd_message, "Dirty", 5);
-	strncpy(lcd_message+16, "                ", 16);
-	lcd_write(LCD_TOP_LINE, lcd_message, 5);
-	lcd_write(LCD_BOT_LINE, lcd_message+16, 16);
+	lcd_write(LCD_TOP_LINE, "Dirty", 5);
+	lcd_write(LCD_BOT_LINE, "                ", 16);
 	set_led_color(0, 0xff, 0);
 }
 
+static const char unloaders[56] = ": Ian   : Dan   : Jimmy : Ed    : Anting: Simon : Ray   ";
+
 void set_clean() {
-	strncpy(lcd_message, "Clean", 5);
-	strncpy(lcd_message+16, "Unloader:", 9);
-	char* unloader;
-	switch (day_of_week >> 1) {
-		case 0:
-			unloader = "Ian   ";
-			break;
-		case 1:
-			unloader = "Dan   ";
-			break;
-		case 2:
-			unloader = "Jimmy ";
-			break;
-		case 3:
-			unloader = "Ed    ";
-			break;
-		case 4:
-			unloader = "Anting";
-			break;
-		case 5:
-			unloader = "Simon ";
-			break;
-		case 6:
-			unloader = "Ray   ";
-			break;
-	}
-	strncpy(lcd_message+26, unloader, 6);
-	lcd_write(LCD_TOP_LINE, lcd_message, 5);
-	lcd_write(LCD_BOT_LINE, lcd_message+16, 16);
+	lcd_write(LCD_TOP_LINE, "Clean", 5);
+	lcd_write(LCD_BOT_LINE, "Unloader", 9);
+	lcd_write(LCD_BOT_LINE + 8,
+			unloaders + ((day_of_week & (~1)) << 2),
+			8);
 	set_led_color(0, 0, 0xff);
 }
 
@@ -75,13 +43,16 @@ void main(void) {
 
 	P1OUT = 0;
 	P2DIR |= ~0;
+	P2OUT = 0;
+	P3DIR |= ~0;
+	P3OUT = 0;
 	P1DIR |= BIT0; // LED
 
-	P1REN |= BUTTON;
+	P1REN |= BUTTON + TOUCH;
 	P1OUT |= BUTTON;	// pull-up
-	P1IE |= BUTTON;		// interrupt
+	P1IE |= BUTTON + TOUCH;		// interrupt
 	P1IES |= BUTTON;
-	P1IFG &= ~BUTTON;
+	P1IFG &= ~(BUTTON + TOUCH);
 
 	__delay_cycles(50000);
 
@@ -91,15 +62,18 @@ void main(void) {
 	set_led_color(0, 0, 0xff);
 
 	init_clock();
-	__enable_interrupt();
+
+	_BIS_SR(CPUOFF	// Turn off CPU to save power
+			+ GIE);	// Enable interrupts
 }
 
 #pragma vector=TIMER0_A0_VECTOR
 __interrupt void Timer_A(void) {
 
-	lcd_write(LCD_TOP_LINE+8, lcd_message+8, 8);
+	P1OUT ^= BIT0;
+	lcd_write(LCD_TOP_LINE+8, lcd_message, 8);
 
-	char* ptr = lcd_message + 15;
+	char* ptr = lcd_message + 7;
 	*ptr += 1;	// ptr = sec1
 	if (*ptr != ':') return;
 	*ptr = '0';
@@ -128,7 +102,7 @@ __interrupt void Timer_A(void) {
 			if (day_of_week == 14) {
 				day_of_week = 0;
 			}
-			if (dirty == 0) set_clean();
+			if (!(DIRTY_REG & DIRTY_BIT)) set_clean();
 			return;
 		}
 		if (*ptr == '3') {
@@ -141,23 +115,16 @@ __interrupt void Timer_A(void) {
 
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void) {
-	P1IFG &= ~BUTTON;
-	P1IE &= ~BUTTON;
-	dirty ^= 1;
-	if (dirty == 0) {
+	P1IFG &= ~(BUTTON + TOUCH);
+	P1IE &= ~(BUTTON + TOUCH);
+	DIRTY_REG ^= DIRTY_BIT;
+	if (DIRTY_REG & DIRTY_BIT) {
+		set_dirty();
+	} else {
 		set_clean();
 	}
-	if (dirty == 1) {
-		set_dirty();
-	}
-	P1IE |= BUTTON;
+	P1IE |= (BUTTON + TOUCH);
 }
-
-//#pragma vector=unused_interrupts
-//__interrupt void unused(void) {
-//
-//}
-
 
 
 
