@@ -2,14 +2,15 @@
 #include "i2c.h"
 #include "lcd.h"
 
-#define BUTTON BIT3
-#define TOUCH BIT1
+#define BUTTON	BIT3
+#define TOUCH	BIT1
 #define DIRTY_REG P2OUT	// store dirty state in unused register bit instead of RAM
 #define DIRTY_BIT BIT0
 
-char lcd_message[16] = "01:00:00";
+char time[5] = "01:00";
 
-unsigned char day_of_week;
+int day_of_week = 0;	// last bit is AM/PM, other bits are day of week
+int seconds = 0;
 void init_clock() {
 	TACCTL0 = CCIE;		// Enable TimerA interrupt
 	TACCR0 = 32767; 	// Interrupt after this many ticks
@@ -48,18 +49,21 @@ void main(void) {
 	P3OUT = 0;
 	P1DIR |= BIT0; // LED
 
-	P1REN |= BUTTON + TOUCH;
+	P1REN |= BUTTON | TOUCH;
 	P1OUT |= BUTTON;	// pull-up
-	P1IE |= BUTTON + TOUCH;		// interrupt
+	P1IE |= BUTTON | TOUCH;		// interrupt
 	P1IES |= BUTTON;
-	P1IFG &= ~(BUTTON + TOUCH);
+	P1IFG &= ~(BUTTON | TOUCH);
 
 	__delay_cycles(50000);
 
-	lcd_init(lcd_message);
+	lcd_init();
+	lcd_write(LCD_TOP_LINE + 6, "- HH:MM AM", 10);
 
 	turn_on_led();
 	set_led_color(0, 0, 0xff);
+
+	set_clean();
 
 	init_clock();
 
@@ -71,17 +75,13 @@ void main(void) {
 __interrupt void Timer_A(void) {
 
 	P1OUT ^= BIT0;
-	lcd_write(LCD_TOP_LINE+8, lcd_message, 8);
+	seconds += 1;
+	if (seconds != 4) return;
 
-	char* ptr = lcd_message + 7;
-	*ptr += 1;	// ptr = sec1
-	if (*ptr != ':') return;
-	*ptr = '0';
-	ptr--;		// ptr = sec10
-	*ptr += 1;
-	if (*ptr != '6') return;
-	*ptr = '0';
-	ptr -= 2;	// ptr = min1
+	seconds = 0;
+	lcd_write(LCD_TOP_LINE + 8, time, 5);
+
+	char* ptr = time + 4;
 	*ptr += 1;
 	if (*ptr != ':') return;
 	*ptr = '0';
@@ -103,6 +103,11 @@ __interrupt void Timer_A(void) {
 				day_of_week = 0;
 			}
 			if (!(DIRTY_REG & DIRTY_BIT)) set_clean();
+			if (day_of_week & 1) {
+				lcd_write(LCD_TOP_LINE + 14, "P", 1);
+			} else {
+				lcd_write(LCD_TOP_LINE + 14, "A", 1);
+			}
 			return;
 		}
 		if (*ptr == '3') {
