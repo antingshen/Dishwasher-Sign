@@ -1,4 +1,4 @@
-#include "msp430G2553.h"
+#include "msp430G2452.h"
 #include "i2c.h"
 #include "lcd.h"
 
@@ -45,8 +45,6 @@ void main(void) {
 	P1OUT = 0;
 	P2DIR |= ~0;
 	P2OUT = 0;
-	P3DIR |= ~0;
-	P3OUT = 0;
 	P1DIR |= BIT0; // LED
 
 	P1REN |= BUTTON | TOUCH;
